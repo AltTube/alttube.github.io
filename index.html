@@ -84,6 +84,7 @@
       <div class="tabs" role="tablist" aria-label="Video source tabs">
         <button id="searchTab" class="tab-btn active" type="button" role="tab" aria-selected="true">Search</button>
         <button id="savedTab" class="tab-btn" type="button" role="tab" aria-selected="false">Saved</button>
+        <button id="historyTab" class="tab-btn" type="button" role="tab" aria-selected="false">History</button>
       </div>
 
       <form id="searchForm" class="search-row">
@@ -127,6 +128,8 @@
       const API_KEY = 'AIzaSyA_InaxCb8wmJee74OvhKvmbKMbgYWAxx8';
       const MAX_RESULTS = 12;
       const SAVED_KEY = 'yt_instant_watch_saved_videos';
+      const HISTORY_KEY = 'yt_instant_watch_watch_history';
+      const MAX_HISTORY_ITEMS = 100;
 
       const form = document.getElementById('searchForm');
       const queryInput = document.getElementById('queryInput');
@@ -139,6 +142,7 @@
       const loadMoreButton = document.getElementById('loadMoreButton');
       const searchTab = document.getElementById('searchTab');
       const savedTab = document.getElementById('savedTab');
+      const historyTab = document.getElementById('historyTab');
       const saveCurrentButton = document.getElementById('saveCurrentButton');
 
       let currentVideo = null;
@@ -148,6 +152,7 @@
       let activeTab = 'search';
       let isLoadingMore = false;
       const savedVideos = new Map();
+      let watchHistory = [];
 
       function loadSavedVideos() {
         try {
@@ -165,6 +170,21 @@
 
       function persistSavedVideos() {
         localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(savedVideos.values())));
+      }
+
+      function loadWatchHistory() {
+        try {
+          const raw = localStorage.getItem(HISTORY_KEY);
+          const list = raw ? JSON.parse(raw) : [];
+          watchHistory = list.filter((video) => video && video.id && video.id.videoId);
+        } catch (error) {
+          console.error('Failed to load watch history', error);
+          watchHistory = [];
+        }
+      }
+
+      function persistWatchHistory() {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(watchHistory));
       }
 
       function setStatus(message) { status.textContent = message; }
@@ -199,23 +219,37 @@
         saveCurrentButton.textContent = saved ? 'Unsave video' : 'Save video';
       }
 
+      function addVideoToHistory(video) {
+        const normalized = normalizeVideo(video);
+        const id = normalized.id.videoId;
+        watchHistory = [normalized, ...watchHistory.filter((item) => item.id.videoId !== id)].slice(0, MAX_HISTORY_ITEMS);
+        persistWatchHistory();
+      }
+
       function setActiveTab(tab) {
         activeTab = tab;
         const isSearch = tab === 'search';
+        const isSaved = tab === 'saved';
+        const isHistory = tab === 'history';
         searchTab.classList.toggle('active', isSearch);
-        savedTab.classList.toggle('active', !isSearch);
+        savedTab.classList.toggle('active', isSaved);
+        historyTab.classList.toggle('active', isHistory);
         searchTab.setAttribute('aria-selected', String(isSearch));
-        savedTab.setAttribute('aria-selected', String(!isSearch));
+        savedTab.setAttribute('aria-selected', String(isSaved));
+        historyTab.setAttribute('aria-selected', String(isHistory));
         form.classList.toggle('hidden', !isSearch);
         loadMoreButton.classList.toggle('hidden', !isSearch || !nextPageToken);
 
         if (isSearch) {
           renderVideoList(searchResults);
           setStatus(searchResults.length ? `Showing ${searchResults.length} search result${searchResults.length === 1 ? '' : 's'}.` : 'Search for videos to get started.');
-        } else {
+        } else if (isSaved) {
           const savedList = Array.from(savedVideos.values());
           renderVideoList(savedList);
           setStatus(savedList.length ? `Showing ${savedList.length} saved video${savedList.length === 1 ? '' : 's'}.` : 'No saved videos yet.');
+        } else {
+          renderVideoList(watchHistory);
+          setStatus(watchHistory.length ? `Showing ${watchHistory.length} watched video${watchHistory.length === 1 ? '' : 's'}.` : 'No watch history yet.');
         }
       }
 
@@ -226,6 +260,12 @@
         playerTitle.textContent = currentVideo.snippet.title;
         playerChannel.textContent = `Channel: ${currentVideo.snippet.channelTitle}`;
         updateSaveCurrentButton();
+        addVideoToHistory(currentVideo);
+
+        if (activeTab === 'history') {
+          renderVideoList(watchHistory);
+          setStatus(`Showing ${watchHistory.length} watched videos.`);
+        }
 
         document.querySelectorAll('.result-item').forEach((button) => {
           button.classList.toggle('active', button.dataset.videoId === id);
@@ -377,12 +417,14 @@
 
       searchTab.addEventListener('click', () => setActiveTab('search'));
       savedTab.addEventListener('click', () => setActiveTab('saved'));
+      historyTab.addEventListener('click', () => setActiveTab('history'));
 
       saveCurrentButton.addEventListener('click', () => {
         if (currentVideo) toggleSave(currentVideo);
       });
 
       loadSavedVideos();
+      loadWatchHistory();
       queryInput.value = 'lofi hip hop';
       form.requestSubmit();
     </script>
