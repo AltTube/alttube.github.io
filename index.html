@@ -51,7 +51,7 @@
       .player-meta { padding: 1rem; }
       .player-meta h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
       .player-meta p { margin: 0; color: var(--muted); font-size: 0.9rem; }
-      .meta-actions { margin-top: 0.75rem; }
+      .meta-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
       .results { max-height: 70vh; overflow: auto; }
       .result-item {
         display: grid; grid-template-columns: 120px 1fr auto; gap: 0.75rem; width: 100%;
@@ -66,6 +66,46 @@
       .result-actions button { padding: 0.5rem 0.7rem; font-size: 0.85rem; border-radius: 8px; }
       .load-more-wrap { margin-top: 0.75rem; display: flex; justify-content: center; }
       .hidden { display: none !important; }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        z-index: 1000;
+      }
+      .modal {
+        width: min(780px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #151515;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1rem;
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .modal-header h3 { margin: 0; }
+      .info-grid {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 0.45rem 0.75rem;
+        margin-top: 0.75rem;
+      }
+      .info-grid dt { color: var(--muted); }
+      .info-grid dd { margin: 0; }
+      .description {
+        margin-top: 1rem;
+        white-space: pre-wrap;
+        color: #ddd;
+        line-height: 1.45;
+      }
       @media (max-width: 900px) {
         .layout { grid-template-columns: 1fr; }
         .results { max-height: none; }
@@ -111,6 +151,7 @@
             <p id="playerChannel"></p>
             <div class="meta-actions">
               <button id="saveCurrentButton" type="button" class="secondary hidden">Save video</button>
+              <button id="infoCurrentButton" type="button" class="secondary hidden">Information</button>
             </div>
           </div>
         </article>
@@ -123,6 +164,28 @@
         </aside>
       </section>
     </main>
+
+    <div id="infoModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="infoTitle">Video information</h3>
+          <button id="closeInfoButton" type="button" class="secondary">Close</button>
+        </div>
+        <p id="infoLoading" class="status">Loading video info...</p>
+        <div id="infoBody" class="hidden">
+          <dl class="info-grid">
+            <dt>Title</dt><dd id="infoVideoTitle"></dd>
+            <dt>Channel</dt><dd id="infoChannel"></dd>
+            <dt>Published</dt><dd id="infoPublished"></dd>
+            <dt>Views</dt><dd id="infoViews"></dd>
+            <dt>Likes</dt><dd id="infoLikes"></dd>
+            <dt>Dislikes</dt><dd id="infoDislikes"></dd>
+            <dt>Comments</dt><dd id="infoComments"></dd>
+          </dl>
+          <p class="description" id="infoDescription"></p>
+        </div>
+      </div>
+    </div>
 
     <script>
       const API_KEY = 'AIzaSyA_InaxCb8wmJee74OvhKvmbKMbgYWAxx8';
@@ -144,6 +207,19 @@
       const savedTab = document.getElementById('savedTab');
       const historyTab = document.getElementById('historyTab');
       const saveCurrentButton = document.getElementById('saveCurrentButton');
+      const infoCurrentButton = document.getElementById('infoCurrentButton');
+      const infoModal = document.getElementById('infoModal');
+      const closeInfoButton = document.getElementById('closeInfoButton');
+      const infoLoading = document.getElementById('infoLoading');
+      const infoBody = document.getElementById('infoBody');
+      const infoVideoTitle = document.getElementById('infoVideoTitle');
+      const infoChannel = document.getElementById('infoChannel');
+      const infoPublished = document.getElementById('infoPublished');
+      const infoViews = document.getElementById('infoViews');
+      const infoLikes = document.getElementById('infoLikes');
+      const infoDislikes = document.getElementById('infoDislikes');
+      const infoComments = document.getElementById('infoComments');
+      const infoDescription = document.getElementById('infoDescription');
 
       let currentVideo = null;
       let searchResults = [];
@@ -153,6 +229,7 @@
       let isLoadingMore = false;
       const savedVideos = new Map();
       let watchHistory = [];
+      const videoInfoCache = new Map();
 
       function loadSavedVideos() {
         try {
@@ -205,17 +282,21 @@
             title: video.snippet.title,
             channelTitle: video.snippet.channelTitle,
             thumbnails: video.snippet.thumbnails,
+            description: video.snippet.description || '',
+            publishedAt: video.snippet.publishedAt,
           },
         };
       }
 
-      function updateSaveCurrentButton() {
+      function updateCurrentActionButtons() {
         if (!currentVideo || !currentVideo.id?.videoId) {
           saveCurrentButton.classList.add('hidden');
+          infoCurrentButton.classList.add('hidden');
           return;
         }
         const saved = isSaved(currentVideo.id.videoId);
         saveCurrentButton.classList.remove('hidden');
+        infoCurrentButton.classList.remove('hidden');
         saveCurrentButton.textContent = saved ? 'Unsave video' : 'Save video';
       }
 
@@ -259,7 +340,7 @@
         player.src = formatVideoUrl(id);
         playerTitle.textContent = currentVideo.snippet.title;
         playerChannel.textContent = `Channel: ${currentVideo.snippet.channelTitle}`;
-        updateSaveCurrentButton();
+        updateCurrentActionButtons();
         addVideoToHistory(currentVideo);
 
         if (activeTab === 'history') {
@@ -281,7 +362,7 @@
           savedVideos.set(id, normalized);
         }
         persistSavedVideos();
-        updateSaveCurrentButton();
+        updateCurrentActionButtons();
 
         if (activeTab === 'saved') {
           setActiveTab('saved');
@@ -359,6 +440,71 @@
         };
       }
 
+      async function getVideoInfo(videoId) {
+        if (videoInfoCache.has(videoId)) return videoInfoCache.get(videoId);
+
+        const params = new URLSearchParams({
+          part: 'snippet,statistics',
+          id: videoId,
+          key: API_KEY,
+        });
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`);
+        if (!response.ok) throw new Error(`Video info request failed (${response.status})`);
+
+        const data = await response.json();
+        const info = data.items?.[0] || null;
+        if (info) videoInfoCache.set(videoId, info);
+        return info;
+      }
+
+      function formatCount(value) {
+        if (value === undefined || value === null) return 'N/A';
+        return Number(value).toLocaleString();
+      }
+
+      function openInfoModal() {
+        infoModal.classList.remove('hidden');
+      }
+
+      function closeInfoModal() {
+        infoModal.classList.add('hidden');
+      }
+
+      async function showVideoInfo() {
+        if (!currentVideo?.id?.videoId) {
+          setStatus('Play a video first to view information.');
+          return;
+        }
+
+        openInfoModal();
+        infoLoading.textContent = 'Loading video info...';
+        infoLoading.classList.remove('hidden');
+        infoBody.classList.add('hidden');
+
+        try {
+          const info = await getVideoInfo(currentVideo.id.videoId);
+          if (!info) throw new Error('No video information returned');
+
+          const snippet = info.snippet || {};
+          const stats = info.statistics || {};
+
+          infoVideoTitle.textContent = snippet.title || currentVideo.snippet.title;
+          infoChannel.textContent = snippet.channelTitle || currentVideo.snippet.channelTitle;
+          infoPublished.textContent = snippet.publishedAt ? new Date(snippet.publishedAt).toLocaleString() : 'N/A';
+          infoViews.textContent = formatCount(stats.viewCount);
+          infoLikes.textContent = formatCount(stats.likeCount);
+          infoDislikes.textContent = 'Not publicly available from YouTube API';
+          infoComments.textContent = formatCount(stats.commentCount);
+          infoDescription.textContent = snippet.description || 'No description provided.';
+
+          infoLoading.classList.add('hidden');
+          infoBody.classList.remove('hidden');
+        } catch (error) {
+          console.error(error);
+          infoLoading.textContent = 'Could not load video information right now.';
+        }
+      }
+
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const query = queryInput.value.trim();
@@ -421,6 +567,11 @@
 
       saveCurrentButton.addEventListener('click', () => {
         if (currentVideo) toggleSave(currentVideo);
+      });
+      infoCurrentButton.addEventListener('click', showVideoInfo);
+      closeInfoButton.addEventListener('click', closeInfoModal);
+      infoModal.addEventListener('click', (event) => {
+        if (event.target === infoModal) closeInfoModal();
       });
 
       loadSavedVideos();
