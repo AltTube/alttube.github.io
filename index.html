@@ -269,6 +269,7 @@
       let shortsNextPageToken = null;
       let shortsLoaded = false;
       let isLoadingShorts = false;
+      const SHORTS_PREFETCH_THRESHOLD_PX = 900;
 
       function loadSavedVideos() {
         try {
@@ -410,6 +411,9 @@
           shortsLoaded = true;
           renderShortsFeed();
           setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+          queueMicrotask(() => {
+            maybePrefetchShorts();
+          });
         } catch (error) {
           console.error(error);
           setStatus('Could not load Shorts right now.');
@@ -420,6 +424,15 @@
 
       async function ensureShortsLoaded() {
         if (!shortsLoaded) await loadMoreShorts();
+      }
+
+      async function maybePrefetchShorts() {
+        if (activeTab !== 'shorts' || isLoadingShorts || !shortsNextPageToken) return;
+
+        const remaining = shortsFeed.scrollHeight - (shortsFeed.scrollTop + shortsFeed.clientHeight);
+        if (remaining <= SHORTS_PREFETCH_THRESHOLD_PX) {
+          await loadMoreShorts();
+        }
       }
 
       function setActiveTab(tab) {
@@ -455,6 +468,9 @@
           ensureShortsLoaded();
           renderShortsFeed();
           setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'Loading Shorts...');
+          queueMicrotask(() => {
+            maybePrefetchShorts();
+          });
         }
       }
 
@@ -701,11 +717,7 @@
 
 
       shortsFeed.addEventListener('scroll', () => {
-        if (activeTab !== 'shorts') return;
-        const nearBottom = shortsFeed.scrollTop + shortsFeed.clientHeight >= shortsFeed.scrollHeight - 120;
-        if (nearBottom && shortsNextPageToken) {
-          loadMoreShorts();
-        }
+        maybePrefetchShorts();
       });
 
       loadSavedVideos();
