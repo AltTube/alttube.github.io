@@ -375,28 +375,40 @@
         };
       }
 
+      function createShortItem(video) {
+        const item = document.createElement('article');
+        item.className = 'shorts-item';
+
+        const frameWrap = document.createElement('div');
+        frameWrap.className = 'shorts-video';
+        frameWrap.innerHTML = `<iframe src="${formatShortsEmbedUrl(video.id.videoId)}" title="Short: ${video.snippet.title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+
+        const meta = document.createElement('div');
+        meta.className = 'shorts-meta';
+        meta.innerHTML = `<span class="title">${video.snippet.title}</span><span class="channel">${video.snippet.channelTitle}</span>`;
+
+        item.appendChild(frameWrap);
+        item.appendChild(meta);
+        return item;
+      }
+
       function renderShortsFeed() {
         shortsFeed.innerHTML = '';
         if (!shortsResults.length) return;
 
         const fragment = document.createDocumentFragment();
         shortsResults.forEach((video) => {
-          const item = document.createElement('article');
-          item.className = 'shorts-item';
-
-          const frameWrap = document.createElement('div');
-          frameWrap.className = 'shorts-video';
-          frameWrap.innerHTML = `<iframe src="${formatShortsEmbedUrl(video.id.videoId)}" title="Short: ${video.snippet.title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
-
-          const meta = document.createElement('div');
-          meta.className = 'shorts-meta';
-          meta.innerHTML = `<span class="title">${video.snippet.title}</span><span class="channel">${video.snippet.channelTitle}</span>`;
-
-          item.appendChild(frameWrap);
-          item.appendChild(meta);
-          fragment.appendChild(item);
+          fragment.appendChild(createShortItem(video));
         });
+        shortsFeed.appendChild(fragment);
+      }
 
+      function appendShortsToFeed(videos) {
+        if (!videos.length) return;
+        const fragment = document.createDocumentFragment();
+        videos.forEach((video) => {
+          fragment.appendChild(createShortItem(video));
+        });
         shortsFeed.appendChild(fragment);
       }
 
@@ -406,14 +418,20 @@
         setStatus('Loading Shorts...');
         try {
           const result = await searchShorts(shortsNextPageToken || '');
-          shortsResults = [...shortsResults, ...result.items];
+          const existingIds = new Set(shortsResults.map((video) => video.id.videoId));
+          const newItems = result.items.filter((video) => !existingIds.has(video.id.videoId));
+
+          shortsResults = [...shortsResults, ...newItems];
           shortsNextPageToken = result.nextPageToken;
+
+          if (!shortsLoaded) {
+            renderShortsFeed();
+          } else {
+            appendShortsToFeed(newItems);
+          }
+
           shortsLoaded = true;
-          renderShortsFeed();
           setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
-          queueMicrotask(() => {
-            maybePrefetchShorts();
-          });
         } catch (error) {
           console.error(error);
           setStatus('Could not load Shorts right now.');
@@ -465,12 +483,12 @@
           renderVideoList(watchHistory);
           setStatus(watchHistory.length ? `Showing ${watchHistory.length} watched video${watchHistory.length === 1 ? '' : 's'}.` : 'No watch history yet.');
         } else {
-          ensureShortsLoaded();
-          renderShortsFeed();
-          setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'Loading Shorts...');
-          queueMicrotask(() => {
-            maybePrefetchShorts();
-          });
+          if (!shortsLoaded) {
+            ensureShortsLoaded();
+            setStatus('Loading Shorts...');
+          } else {
+            setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+          }
         }
       }
 
