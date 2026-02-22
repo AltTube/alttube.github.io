@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YouTube Instant Watch</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f0f0f;
+        --surface: #1a1a1a;
+        --surface-hover: #252525;
+        --text: #f1f1f1;
+        --muted: #aaaaaa;
+        --accent: #ff0033;
+        --border: #333;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: radial-gradient(circle at top, #1f1f1f 0%, var(--bg) 45%);
+        color: var(--text);
+        min-height: 100vh;
+      }
+      .app { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+      h1 { margin: 0 0 1rem; font-size: clamp(1.8rem, 3vw, 2.4rem); }
+      p.subtitle { margin: 0 0 1.5rem; color: var(--muted); }
+      .tabs { display: inline-flex; background: #111; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 1rem; }
+      .tab-btn { background: transparent; border: none; color: var(--muted); padding: 0.6rem 1rem; cursor: pointer; font-weight: 600; border-radius: 0; }
+      .tab-btn.active { background: var(--surface-hover); color: var(--text); }
+      .search-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+      input[type='search'] {
+        flex: 1 1 320px; border: 1px solid var(--border); border-radius: 12px; background: #111;
+        color: var(--text); padding: 0.85rem 1rem; font-size: 1rem;
+      }
+      button {
+        border: none; border-radius: 12px; background: var(--accent); color: white;
+        font-weight: 600; padding: 0.85rem 1.2rem; cursor: pointer;
+      }
+      button.secondary { background: #2b2b2b; color: var(--text); border: 1px solid var(--border); }
+      button:disabled { opacity: 0.6; cursor: progress; }
+      .status { min-height: 1.4rem; color: var(--muted); margin-bottom: 1rem; }
+      .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+      .player-card, .results {
+        background: color-mix(in srgb, var(--surface), #000 8%);
+        border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+      }
+      .player { position: relative; padding-top: 56.25%; background: #000; }
+      iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+      .player-meta { padding: 1rem; }
+      .player-meta h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+      .player-meta p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+      .meta-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+      .results { max-height: 70vh; overflow: auto; }
+      .result-item {
+        display: grid; grid-template-columns: 120px 1fr auto; gap: 0.75rem; width: 100%;
+        border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+        text-align: left; padding: 0.75rem; background: transparent; cursor: pointer;
+      }
+      .result-item:hover, .result-item.active { background: var(--surface-hover); }
+      .result-item img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; }
+      .result-item .title { display: block; font-size: 0.95rem; line-height: 1.35; margin-bottom: 0.35rem; }
+      .result-item .channel { display: block; color: var(--muted); font-size: 0.85rem; }
+      .result-actions { display: flex; align-items: center; }
+      .result-actions button { padding: 0.5rem 0.7rem; font-size: 0.85rem; border-radius: 8px; }
+      .load-more-wrap { margin-top: 0.75rem; display: flex; justify-content: center; }
+      .hidden { display: none !important; }
+
+      .shorts-item {
+        border-bottom: 1px solid var(--border);
+        padding: 0.75rem;
+      }
+      .shorts-video {
+        position: relative;
+        width: min(360px, 100%);
+        margin: 0 auto;
+        aspect-ratio: 9 / 16;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .shorts-video iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .shorts-meta {
+        margin-top: 0.55rem;
+      }
+      .shorts-meta .title {
+        font-size: 0.92rem;
+        display: block;
+      }
+      .shorts-meta .channel {
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        z-index: 1000;
+      }
+      .modal {
+        width: min(780px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #151515;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1rem;
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .modal-header h3 { margin: 0; }
+      .info-grid {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 0.45rem 0.75rem;
+        margin-top: 0.75rem;
+      }
+      .info-grid dt { color: var(--muted); }
+      .info-grid dd { margin: 0; }
+      .description {
+        margin-top: 1rem;
+        white-space: pre-wrap;
+        color: #ddd;
+        line-height: 1.45;
+      }
+      @media (max-width: 900px) {
+        .layout { grid-template-columns: 1fr; }
+        .results { max-height: none; }
+      }
+      @media (max-width: 560px) {
+        .result-item { grid-template-columns: 1fr; }
+        .result-item img { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <h1>YouTube Instant Watch</h1>
+      <p class="subtitle">Search videos and play them immediately without leaving this page.</p>
+
+      <div class="tabs" role="tablist" aria-label="Video source tabs">
+        <button id="searchTab" class="tab-btn active" type="button" role="tab" aria-selected="true">Search</button>
+        <button id="savedTab" class="tab-btn" type="button" role="tab" aria-selected="false">Saved</button>
+        <button id="historyTab" class="tab-btn" type="button" role="tab" aria-selected="false">History</button>
+        <button id="shortsTab" class="tab-btn" type="button" role="tab" aria-selected="false">Shorts</button>
+      </div>
+
+      <form id="searchForm" class="search-row">
+        <input id="queryInput" type="search" placeholder="Search YouTube videos..." autocomplete="off" required />
+        <button id="searchButton" type="submit">Search</button>
+      </form>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section class="layout">
+        <article class="player-card">
+          <div class="player">
+            <iframe
+              id="youtubePlayer"
+              src=""
+              title="YouTube video player"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <div class="player-meta">
+            <h2 id="playerTitle">Search for a video to start watching</h2>
+            <p id="playerChannel"></p>
+            <div class="meta-actions">
+              <button id="saveCurrentButton" type="button" class="secondary hidden">Save video</button>
+              <button id="infoCurrentButton" type="button" class="secondary hidden">Information</button>
+            </div>
+          </div>
+        </article>
+
+        <aside>
+          <div id="results" class="results" aria-label="Search results"></div>
+          <div id="shortsFeed" class="results hidden" aria-label="YouTube Shorts feed"></div>
+          <div class="load-more-wrap">
+            <button id="loadMoreButton" type="button" class="secondary hidden">Load More Videos</button>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <div id="infoModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="infoTitle">Video information</h3>
+          <button id="closeInfoButton" type="button" class="secondary">Close</button>
+        </div>
+        <p id="infoLoading" class="status">Loading video info...</p>
+        <div id="infoBody" class="hidden">
+          <dl class="info-grid">
+            <dt>Title</dt><dd id="infoVideoTitle"></dd>
+            <dt>Channel</dt><dd id="infoChannel"></dd>
+            <dt>Published</dt><dd id="infoPublished"></dd>
+            <dt>Views</dt><dd id="infoViews"></dd>
+            <dt>Likes</dt><dd id="infoLikes"></dd>
+            <dt>Dislikes</dt><dd id="infoDislikes"></dd>
+            <dt>Comments</dt><dd id="infoComments"></dd>
+          </dl>
+          <p class="description" id="infoDescription"></p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_KEY = 'AIzaSyA_InaxCb8wmJee74OvhKvmbKMbgYWAxx8';
+      const MAX_RESULTS = 12;
+      const SAVED_KEY = 'yt_instant_watch_saved_videos';
+      const HISTORY_KEY = 'yt_instant_watch_watch_history';
+      const MAX_HISTORY_ITEMS = 100;
+
+      const form = document.getElementById('searchForm');
+      const queryInput = document.getElementById('queryInput');
+      const searchButton = document.getElementById('searchButton');
+      const status = document.getElementById('status');
+      const resultsContainer = document.getElementById('results');
+      const shortsFeed = document.getElementById('shortsFeed');
+      const player = document.getElementById('youtubePlayer');
+      const playerTitle = document.getElementById('playerTitle');
+      const playerChannel = document.getElementById('playerChannel');
+      const loadMoreButton = document.getElementById('loadMoreButton');
+      const searchTab = document.getElementById('searchTab');
+      const savedTab = document.getElementById('savedTab');
+      const historyTab = document.getElementById('historyTab');
+      const shortsTab = document.getElementById('shortsTab');
+      const saveCurrentButton = document.getElementById('saveCurrentButton');
+      const infoCurrentButton = document.getElementById('infoCurrentButton');
+      const infoModal = document.getElementById('infoModal');
+      const closeInfoButton = document.getElementById('closeInfoButton');
+      const infoLoading = document.getElementById('infoLoading');
+      const infoBody = document.getElementById('infoBody');
+      const infoVideoTitle = document.getElementById('infoVideoTitle');
+      const infoChannel = document.getElementById('infoChannel');
+      const infoPublished = document.getElementById('infoPublished');
+      const infoViews = document.getElementById('infoViews');
+      const infoLikes = document.getElementById('infoLikes');
+      const infoDislikes = document.getElementById('infoDislikes');
+      const infoComments = document.getElementById('infoComments');
+      const infoDescription = document.getElementById('infoDescription');
+
+      let currentVideo = null;
+      let searchResults = [];
+      let nextPageToken = null;
+      let currentQuery = '';
+      let activeTab = 'search';
+      let isLoadingMore = false;
+      const savedVideos = new Map();
+      let watchHistory = [];
+      const videoInfoCache = new Map();
+      let shortsResults = [];
+      let shortsNextPageToken = null;
+      let shortsLoaded = false;
+      let isLoadingShorts = false;
+      const SHORTS_PREFETCH_THRESHOLD_PX = 900;
+
+      function loadSavedVideos() {
+        try {
+          const raw = localStorage.getItem(SAVED_KEY);
+          const list = raw ? JSON.parse(raw) : [];
+          list.forEach((video) => {
+            if (video && video.id && video.id.videoId) {
+              savedVideos.set(video.id.videoId, video);
+            }
+          });
+        } catch (error) {
+          console.error('Failed to load saved videos', error);
+        }
+      }
+
+      function persistSavedVideos() {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(savedVideos.values())));
+      }
+
+      function loadWatchHistory() {
+        try {
+          const raw = localStorage.getItem(HISTORY_KEY);
+          const list = raw ? JSON.parse(raw) : [];
+          watchHistory = list.filter((video) => video && video.id && video.id.videoId);
+        } catch (error) {
+          console.error('Failed to load watch history', error);
+          watchHistory = [];
+        }
+      }
+
+      function persistWatchHistory() {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(watchHistory));
+      }
+
+      function setStatus(message) { status.textContent = message; }
+
+      function formatVideoUrl(videoId) {
+        const params = new URLSearchParams({ autoplay: '1', rel: '0' });
+        return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+      }
+
+      function isSaved(videoId) {
+        return savedVideos.has(videoId);
+      }
+
+      function normalizeVideo(video) {
+        return {
+          id: { videoId: video.id.videoId },
+          snippet: {
+            title: video.snippet.title,
+            channelTitle: video.snippet.channelTitle,
+            thumbnails: video.snippet.thumbnails,
+            description: video.snippet.description || '',
+            publishedAt: video.snippet.publishedAt,
+          },
+        };
+      }
+
+      function updateCurrentActionButtons() {
+        if (!currentVideo || !currentVideo.id?.videoId) {
+          saveCurrentButton.classList.add('hidden');
+          infoCurrentButton.classList.add('hidden');
+          return;
+        }
+        const saved = isSaved(currentVideo.id.videoId);
+        saveCurrentButton.classList.remove('hidden');
+        infoCurrentButton.classList.remove('hidden');
+        saveCurrentButton.textContent = saved ? 'Unsave video' : 'Save video';
+      }
+
+      function addVideoToHistory(video) {
+        const normalized = normalizeVideo(video);
+        const id = normalized.id.videoId;
+        watchHistory = [normalized, ...watchHistory.filter((item) => item.id.videoId !== id)].slice(0, MAX_HISTORY_ITEMS);
+        persistWatchHistory();
+      }
+
+
+      function formatShortsEmbedUrl(videoId) {
+        const params = new URLSearchParams({ autoplay: '0', rel: '0' });
+        return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+      }
+
+      async function searchShorts(pageToken = '') {
+        const params = new URLSearchParams({
+          part: 'snippet',
+          type: 'video',
+          videoDuration: 'short',
+          videoEmbeddable: 'true',
+          maxResults: '10',
+          q: 'shorts',
+          key: API_KEY,
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`);
+        if (!response.ok) throw new Error(`Shorts API request failed (${response.status})`);
+
+        const data = await response.json();
+        return {
+          items: (data.items || []).filter((item) => item?.id?.videoId),
+          nextPageToken: data.nextPageToken || null,
+        };
+      }
+
+      function createShortItem(video) {
+        const item = document.createElement('article');
+        item.className = 'shorts-item';
+
+        const frameWrap = document.createElement('div');
+        frameWrap.className = 'shorts-video';
+        frameWrap.innerHTML = `<iframe src="${formatShortsEmbedUrl(video.id.videoId)}" title="Short: ${video.snippet.title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+
+        const meta = document.createElement('div');
+        meta.className = 'shorts-meta';
+        meta.innerHTML = `<span class="title">${video.snippet.title}</span><span class="channel">${video.snippet.channelTitle}</span>`;
+
+        item.appendChild(frameWrap);
+        item.appendChild(meta);
+        return item;
+      }
+
+      function renderShortsFeed() {
+        shortsFeed.innerHTML = '';
+        if (!shortsResults.length) return;
+
+        const fragment = document.createDocumentFragment();
+        shortsResults.forEach((video) => {
+          fragment.appendChild(createShortItem(video));
+        });
+        shortsFeed.appendChild(fragment);
+      }
+
+      function appendShortsToFeed(videos) {
+        if (!videos.length) return;
+        const fragment = document.createDocumentFragment();
+        videos.forEach((video) => {
+          fragment.appendChild(createShortItem(video));
+        });
+        shortsFeed.appendChild(fragment);
+      }
+
+      async function loadMoreShorts() {
+        if (isLoadingShorts || (!shortsNextPageToken && shortsLoaded)) return;
+        isLoadingShorts = true;
+        setStatus('Loading Shorts...');
+        try {
+          const result = await searchShorts(shortsNextPageToken || '');
+          const existingIds = new Set(shortsResults.map((video) => video.id.videoId));
+          const newItems = result.items.filter((video) => !existingIds.has(video.id.videoId));
+
+          shortsResults = [...shortsResults, ...newItems];
+          shortsNextPageToken = result.nextPageToken;
+
+          if (!shortsLoaded) {
+            renderShortsFeed();
+          } else {
+            appendShortsToFeed(newItems);
+          }
+
+          shortsLoaded = true;
+          setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+        } catch (error) {
+          console.error(error);
+          setStatus('Could not load Shorts right now.');
+        } finally {
+          isLoadingShorts = false;
+        }
+      }
+
+      async function ensureShortsLoaded() {
+        if (!shortsLoaded) await loadMoreShorts();
+      }
+
+      async function maybePrefetchShorts() {
+        if (activeTab !== 'shorts' || isLoadingShorts || !shortsNextPageToken) return;
+
+        const remaining = shortsFeed.scrollHeight - (shortsFeed.scrollTop + shortsFeed.clientHeight);
+        if (remaining <= SHORTS_PREFETCH_THRESHOLD_PX) {
+          await loadMoreShorts();
+        }
+      }
+
+      function setActiveTab(tab) {
+        activeTab = tab;
+        const isSearch = tab === 'search';
+        const isSaved = tab === 'saved';
+        const isHistory = tab === 'history';
+        const isShorts = tab === 'shorts';
+        searchTab.classList.toggle('active', isSearch);
+        savedTab.classList.toggle('active', isSaved);
+        historyTab.classList.toggle('active', isHistory);
+        shortsTab.classList.toggle('active', isShorts);
+        searchTab.setAttribute('aria-selected', String(isSearch));
+        savedTab.setAttribute('aria-selected', String(isSaved));
+        historyTab.setAttribute('aria-selected', String(isHistory));
+        shortsTab.setAttribute('aria-selected', String(isShorts));
+        form.classList.toggle('hidden', !(isSearch));
+        resultsContainer.classList.toggle('hidden', isShorts);
+        shortsFeed.classList.toggle('hidden', !isShorts);
+        loadMoreButton.classList.toggle('hidden', !isSearch || !nextPageToken);
+
+        if (isSearch) {
+          renderVideoList(searchResults);
+          setStatus(searchResults.length ? `Showing ${searchResults.length} search result${searchResults.length === 1 ? '' : 's'}.` : 'Search for videos to get started.');
+        } else if (isSaved) {
+          const savedList = Array.from(savedVideos.values());
+          renderVideoList(savedList);
+          setStatus(savedList.length ? `Showing ${savedList.length} saved video${savedList.length === 1 ? '' : 's'}.` : 'No saved videos yet.');
+        } else if (isHistory) {
+          renderVideoList(watchHistory);
+          setStatus(watchHistory.length ? `Showing ${watchHistory.length} watched video${watchHistory.length === 1 ? '' : 's'}.` : 'No watch history yet.');
+        } else {
+          if (!shortsLoaded) {
+            ensureShortsLoaded();
+            setStatus('Loading Shorts...');
+          } else {
+            setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+          }
+        }
+      }
+
+      function playVideo(video) {
+        currentVideo = normalizeVideo(video);
+        const id = currentVideo.id.videoId;
+        player.src = formatVideoUrl(id);
+        playerTitle.textContent = currentVideo.snippet.title;
+        playerChannel.textContent = `Channel: ${currentVideo.snippet.channelTitle}`;
+        updateCurrentActionButtons();
+        addVideoToHistory(currentVideo);
+
+        if (activeTab === 'history') {
+          renderVideoList(watchHistory);
+          setStatus(`Showing ${watchHistory.length} watched videos.`);
+        }
+
+        document.querySelectorAll('.result-item').forEach((button) => {
+          button.classList.toggle('active', button.dataset.videoId === id);
+        });
+      }
+
+      function toggleSave(video) {
+        const normalized = normalizeVideo(video);
+        const id = normalized.id.videoId;
+        if (savedVideos.has(id)) {
+          savedVideos.delete(id);
+        } else {
+          savedVideos.set(id, normalized);
+        }
+        persistSavedVideos();
+        updateCurrentActionButtons();
+
+        if (activeTab === 'saved') {
+          setActiveTab('saved');
+        } else {
+          renderVideoList(searchResults);
+        }
+      }
+
+      function renderVideoList(videos) {
+        resultsContainer.innerHTML = '';
+        if (!videos.length) return;
+
+        const fragment = document.createDocumentFragment();
+        videos.forEach((video) => {
+          const item = document.createElement('article');
+          item.className = 'result-item';
+          item.dataset.videoId = video.id.videoId;
+
+          const thumb = video.snippet.thumbnails.medium || video.snippet.thumbnails.default;
+          const info = document.createElement('div');
+          info.innerHTML = `
+            <span class="title">${video.snippet.title}</span>
+            <span class="channel">${video.snippet.channelTitle}</span>
+          `;
+
+          const image = document.createElement('img');
+          image.src = thumb.url;
+          image.alt = `Thumbnail for ${video.snippet.title}`;
+          image.loading = 'lazy';
+
+          const actionWrap = document.createElement('div');
+          actionWrap.className = 'result-actions';
+          const saveBtn = document.createElement('button');
+          saveBtn.type = 'button';
+          saveBtn.className = 'secondary';
+          saveBtn.textContent = isSaved(video.id.videoId) ? 'Unsave' : 'Save';
+          saveBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSave(video);
+          });
+          actionWrap.appendChild(saveBtn);
+
+          item.appendChild(image);
+          item.appendChild(info);
+          item.appendChild(actionWrap);
+          item.addEventListener('click', () => playVideo(video));
+
+          if (currentVideo && currentVideo.id.videoId === video.id.videoId) {
+            item.classList.add('active');
+          }
+          fragment.appendChild(item);
+        });
+
+        resultsContainer.appendChild(fragment);
+      }
+
+      async function searchVideos(query, pageToken = '') {
+        const params = new URLSearchParams({
+          part: 'snippet',
+          type: 'video',
+          maxResults: String(MAX_RESULTS),
+          q: query,
+          key: API_KEY,
+        });
+
+        if (pageToken) params.set('pageToken', pageToken);
+
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`);
+        if (!response.ok) throw new Error(`API request failed (${response.status})`);
+
+        const data = await response.json();
+        return {
+          items: (data.items || []).filter((item) => item?.id?.videoId),
+          nextPageToken: data.nextPageToken || null,
+        };
+      }
+
+      async function getVideoInfo(videoId) {
+        if (videoInfoCache.has(videoId)) return videoInfoCache.get(videoId);
+
+        const params = new URLSearchParams({
+          part: 'snippet,statistics',
+          id: videoId,
+          key: API_KEY,
+        });
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`);
+        if (!response.ok) throw new Error(`Video info request failed (${response.status})`);
+
+        const data = await response.json();
+        const info = data.items?.[0] || null;
+        if (info) videoInfoCache.set(videoId, info);
+        return info;
+      }
+
+      function formatCount(value) {
+        if (value === undefined || value === null) return 'N/A';
+        return Number(value).toLocaleString();
+      }
+
+      function openInfoModal() {
+        infoModal.classList.remove('hidden');
+      }
+
+      function closeInfoModal() {
+        infoModal.classList.add('hidden');
+      }
+
+      async function showVideoInfo() {
+        if (!currentVideo?.id?.videoId) {
+          setStatus('Play a video first to view information.');
+          return;
+        }
+
+        openInfoModal();
+        infoLoading.textContent = 'Loading video info...';
+        infoLoading.classList.remove('hidden');
+        infoBody.classList.add('hidden');
+
+        try {
+          const info = await getVideoInfo(currentVideo.id.videoId);
+          if (!info) throw new Error('No video information returned');
+
+          const snippet = info.snippet || {};
+          const stats = info.statistics || {};
+
+          infoVideoTitle.textContent = snippet.title || currentVideo.snippet.title;
+          infoChannel.textContent = snippet.channelTitle || currentVideo.snippet.channelTitle;
+          infoPublished.textContent = snippet.publishedAt ? new Date(snippet.publishedAt).toLocaleString() : 'N/A';
+          infoViews.textContent = formatCount(stats.viewCount);
+          infoLikes.textContent = formatCount(stats.likeCount);
+          infoDislikes.textContent = 'Not publicly available from YouTube API';
+          infoComments.textContent = formatCount(stats.commentCount);
+          infoDescription.textContent = snippet.description || 'No description provided.';
+
+          infoLoading.classList.add('hidden');
+          infoBody.classList.remove('hidden');
+        } catch (error) {
+          console.error(error);
+          infoLoading.textContent = 'Could not load video information right now.';
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const query = queryInput.value.trim();
+        if (!query) {
+          setStatus('Enter a search term first.');
+          return;
+        }
+
+        setStatus('Searching...');
+        searchButton.disabled = true;
+        loadMoreButton.classList.add('hidden');
+
+        try {
+          currentQuery = query;
+          const result = await searchVideos(query);
+          searchResults = result.items;
+          nextPageToken = result.nextPageToken;
+          setActiveTab('search');
+
+          if (searchResults.length) {
+            playVideo(searchResults[0]);
+          } else {
+            setStatus('No videos found. Try a different search term.');
+          }
+
+          loadMoreButton.classList.toggle('hidden', !nextPageToken);
+        } catch (error) {
+          console.error(error);
+          setStatus('Could not load videos. Check API key quota/settings and try again.');
+        } finally {
+          searchButton.disabled = false;
+        }
+      });
+
+      loadMoreButton.addEventListener('click', async () => {
+        if (!nextPageToken || !currentQuery || isLoadingMore) return;
+        isLoadingMore = true;
+        loadMoreButton.disabled = true;
+        setStatus('Loading more videos...');
+
+        try {
+          const result = await searchVideos(currentQuery, nextPageToken);
+          searchResults = [...searchResults, ...result.items];
+          nextPageToken = result.nextPageToken;
+          renderVideoList(searchResults);
+          setStatus(`Showing ${searchResults.length} search results.`);
+          loadMoreButton.classList.toggle('hidden', !nextPageToken);
+        } catch (error) {
+          console.error(error);
+          setStatus('Could not load more videos right now.');
+        } finally {
+          isLoadingMore = false;
+          loadMoreButton.disabled = false;
+        }
+      });
+
+      searchTab.addEventListener('click', () => setActiveTab('search'));
+      savedTab.addEventListener('click', () => setActiveTab('saved'));
+      historyTab.addEventListener('click', () => setActiveTab('history'));
+      shortsTab.addEventListener('click', () => setActiveTab('shorts'));
+
+      saveCurrentButton.addEventListener('click', () => {
+        if (currentVideo) toggleSave(currentVideo);
+      });
+      infoCurrentButton.addEventListener('click', showVideoInfo);
+      closeInfoButton.addEventListener('click', closeInfoModal);
+      infoModal.addEventListener('click', (event) => {
+        if (event.target === infoModal) closeInfoModal();
+      });
+
+
+      shortsFeed.addEventListener('scroll', () => {
+        maybePrefetchShorts();
+      });
+
+      loadSavedVideos();
+      loadWatchHistory();
+      queryInput.value = 'lofi hip hop';
+      form.requestSubmit();
+    </script>
+  </body>
+</html>
