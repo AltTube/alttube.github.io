@@ -97,6 +97,13 @@
         color: var(--muted);
         font-size: 0.83rem;
       }
+
+      .shorts-load-more-wrap {
+        padding: 0.9rem;
+        display: flex;
+        justify-content: center;
+        border-top: 1px solid var(--border);
+      }
       .modal-overlay {
         position: fixed;
         inset: 0;
@@ -193,7 +200,6 @@
           <div id="shortsFeed" class="results hidden" aria-label="YouTube Shorts feed"></div>
           <div class="load-more-wrap">
             <button id="loadMoreButton" type="button" class="secondary hidden">Load More Videos</button>
-            <button id="shortsLoadMoreButton" type="button" class="secondary hidden">Load More</button>
           </div>
         </aside>
       </section>
@@ -238,7 +244,6 @@
       const playerTitle = document.getElementById('playerTitle');
       const playerChannel = document.getElementById('playerChannel');
       const loadMoreButton = document.getElementById('loadMoreButton');
-      const shortsLoadMoreButton = document.getElementById('shortsLoadMoreButton');
       const searchTab = document.getElementById('searchTab');
       const savedTab = document.getElementById('savedTab');
       const historyTab = document.getElementById('historyTab');
@@ -271,7 +276,6 @@
       let shortsNextPageToken = null;
       let shortsLoaded = false;
       let isLoadingShorts = false;
-      const SHORTS_BOTTOM_THRESHOLD_PX = 140;
 
       function loadSavedVideos() {
         try {
@@ -403,6 +407,7 @@
           fragment.appendChild(createShortItem(video));
         });
         shortsFeed.appendChild(fragment);
+        renderShortsLoadMoreFooter();
       }
 
       function appendShortsToFeed(videos) {
@@ -412,6 +417,7 @@
           fragment.appendChild(createShortItem(video));
         });
         shortsFeed.appendChild(fragment);
+        renderShortsLoadMoreFooter();
       }
 
       async function loadMoreShorts() {
@@ -434,7 +440,7 @@
 
           shortsLoaded = true;
           setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
-          updateShortsLoadMoreVisibility();
+          renderShortsLoadMoreFooter();
         } catch (error) {
           console.error(error);
           setStatus('Could not load Shorts right now.');
@@ -447,14 +453,25 @@
         if (!shortsLoaded) await loadMoreShorts();
       }
 
-      function isNearShortsBottom() {
-        const remaining = shortsFeed.scrollHeight - (shortsFeed.scrollTop + shortsFeed.clientHeight);
-        return remaining <= SHORTS_BOTTOM_THRESHOLD_PX;
-      }
+      function renderShortsLoadMoreFooter() {
+        shortsFeed.querySelectorAll('.shorts-load-more-wrap').forEach((el) => el.remove());
 
-      function updateShortsLoadMoreVisibility() {
-        const shouldShow = activeTab === 'shorts' && !!shortsNextPageToken && isNearShortsBottom() && !isLoadingShorts;
-        shortsLoadMoreButton.classList.toggle('hidden', !shouldShow);
+        if (!shortsNextPageToken) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'shorts-load-more-wrap';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'secondary';
+        btn.textContent = isLoadingShorts ? 'Loading...' : 'Load More';
+        btn.disabled = isLoadingShorts;
+        btn.addEventListener('click', async () => {
+          await loadMoreShorts();
+        });
+
+        wrap.appendChild(btn);
+        shortsFeed.appendChild(wrap);
       }
 
       function setActiveTab(tab) {
@@ -475,7 +492,6 @@
         resultsContainer.classList.toggle('hidden', isShorts);
         shortsFeed.classList.toggle('hidden', !isShorts);
         loadMoreButton.classList.toggle('hidden', !isSearch || !nextPageToken);
-        shortsLoadMoreButton.classList.add('hidden');
 
         if (isSearch) {
           renderVideoList(searchResults);
@@ -493,7 +509,7 @@
             setStatus('Loading Shorts...');
           } else {
             setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
-            updateShortsLoadMoreVisibility();
+            renderShortsLoadMoreFooter();
           }
         }
       }
@@ -739,14 +755,6 @@
         if (event.target === infoModal) closeInfoModal();
       });
 
-
-      shortsFeed.addEventListener('scroll', () => {
-        updateShortsLoadMoreVisibility();
-      });
-
-      shortsLoadMoreButton.addEventListener('click', async () => {
-        await loadMoreShorts();
-      });
 
       loadSavedVideos();
       loadWatchHistory();
