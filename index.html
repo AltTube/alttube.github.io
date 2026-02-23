@@ -193,6 +193,7 @@
           <div id="shortsFeed" class="results hidden" aria-label="YouTube Shorts feed"></div>
           <div class="load-more-wrap">
             <button id="loadMoreButton" type="button" class="secondary hidden">Load More Videos</button>
+            <button id="shortsLoadMoreButton" type="button" class="secondary hidden">Load More</button>
           </div>
         </aside>
       </section>
@@ -237,6 +238,7 @@
       const playerTitle = document.getElementById('playerTitle');
       const playerChannel = document.getElementById('playerChannel');
       const loadMoreButton = document.getElementById('loadMoreButton');
+      const shortsLoadMoreButton = document.getElementById('shortsLoadMoreButton');
       const searchTab = document.getElementById('searchTab');
       const savedTab = document.getElementById('savedTab');
       const historyTab = document.getElementById('historyTab');
@@ -269,7 +271,7 @@
       let shortsNextPageToken = null;
       let shortsLoaded = false;
       let isLoadingShorts = false;
-      const SHORTS_PREFETCH_THRESHOLD_PX = 900;
+      const SHORTS_BOTTOM_THRESHOLD_PX = 140;
 
       function loadSavedVideos() {
         try {
@@ -432,6 +434,7 @@
 
           shortsLoaded = true;
           setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+          updateShortsLoadMoreVisibility();
         } catch (error) {
           console.error(error);
           setStatus('Could not load Shorts right now.');
@@ -444,13 +447,14 @@
         if (!shortsLoaded) await loadMoreShorts();
       }
 
-      async function maybePrefetchShorts() {
-        if (activeTab !== 'shorts' || isLoadingShorts || !shortsNextPageToken) return;
-
+      function isNearShortsBottom() {
         const remaining = shortsFeed.scrollHeight - (shortsFeed.scrollTop + shortsFeed.clientHeight);
-        if (remaining <= SHORTS_PREFETCH_THRESHOLD_PX) {
-          await loadMoreShorts();
-        }
+        return remaining <= SHORTS_BOTTOM_THRESHOLD_PX;
+      }
+
+      function updateShortsLoadMoreVisibility() {
+        const shouldShow = activeTab === 'shorts' && !!shortsNextPageToken && isNearShortsBottom() && !isLoadingShorts;
+        shortsLoadMoreButton.classList.toggle('hidden', !shouldShow);
       }
 
       function setActiveTab(tab) {
@@ -471,6 +475,7 @@
         resultsContainer.classList.toggle('hidden', isShorts);
         shortsFeed.classList.toggle('hidden', !isShorts);
         loadMoreButton.classList.toggle('hidden', !isSearch || !nextPageToken);
+        shortsLoadMoreButton.classList.add('hidden');
 
         if (isSearch) {
           renderVideoList(searchResults);
@@ -488,6 +493,7 @@
             setStatus('Loading Shorts...');
           } else {
             setStatus(shortsResults.length ? `Showing ${shortsResults.length} Shorts.` : 'No Shorts available right now.');
+            updateShortsLoadMoreVisibility();
           }
         }
       }
@@ -735,7 +741,11 @@
 
 
       shortsFeed.addEventListener('scroll', () => {
-        maybePrefetchShorts();
+        updateShortsLoadMoreVisibility();
+      });
+
+      shortsLoadMoreButton.addEventListener('click', async () => {
+        await loadMoreShorts();
       });
 
       loadSavedVideos();
