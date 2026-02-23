@@ -426,16 +426,13 @@
         setStatus('Loading Shorts...');
         try {
           const result = await searchShorts(shortsNextPageToken || '');
-          const existingIds = new Set(shortsResults.map((video) => video.id.videoId));
-          const newItems = result.items.filter((video) => !existingIds.has(video.id.videoId));
-
-          shortsResults = [...shortsResults, ...newItems];
+          shortsResults = [...shortsResults, ...result.items];
           shortsNextPageToken = result.nextPageToken;
 
           if (!shortsLoaded) {
             renderShortsFeed();
           } else {
-            appendShortsToFeed(newItems);
+            appendShortsToFeed(result.items);
           }
 
           shortsLoaded = true;
@@ -446,6 +443,7 @@
           setStatus('Could not load Shorts right now.');
         } finally {
           isLoadingShorts = false;
+          renderShortsLoadMoreFooter();
         }
       }
 
@@ -464,7 +462,7 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'secondary';
-        btn.textContent = isLoadingShorts ? 'Loading...' : 'Load More';
+        btn.textContent = isLoadingShorts ? 'Loading more Shorts...' : 'Load More Shorts';
         btn.disabled = isLoadingShorts;
         btn.addEventListener('click', async () => {
           await loadMoreShorts();
